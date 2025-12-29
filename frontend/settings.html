@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Settings</title>
+
+<style>
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* BACK BUTTON */
+.back-btn{
+  position:fixed;
+  top:20px;
+  left:20px;
+  font-size:22px;
+  cursor:pointer;
+  color:white;
+  background:rgba(0,0,0,0.4);
+  width:40px;
+  height:40px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transition:0.3s;
+  z-index:1000;
+}
+
+.back-btn:hover{
+  background:rgba(34,197,94,0.8);
+}
+
+body{
+  min-height:100vh;
+  background:#020617;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  color:white;
+}
+
+.settings-box{
+  width:360px;
+  background:#020617;
+  border:1px solid #334155;
+  border-radius:18px;
+  padding:30px;
+  box-shadow:0 0 30px black;
+  text-align:center;
+}
+
+h1{
+  margin-bottom:25px;
+  color:#22c55e;
+}
+
+button{
+  width:100%;
+  padding:12px;
+  margin-bottom:15px;
+  border:none;
+  border-radius:12px;
+  cursor:pointer;
+  font-size:15px;
+}
+
+.change{
+  background:#334155;
+  color:white;
+}
+
+.logout{
+  background:#ef4444;
+  color:white;
+}
+
+small{
+  display:block;
+  opacity:0.7;
+}
+</style>
+</head>
+
+<body>
+
+<!-- ⬅ BACK BUTTON -->
+<div class="back-btn" onclick="goBack()">←</div>
+
+<!-- SETTINGS BOX -->
+<div class="settings-box">
+  <h1>Settings</h1>
+
+  <button class="change" onclick="goToReset()">
+    Change Password
+  </button>
+
+  <small>Password reset will be done via email verification</small>
+
+  <br><br>
+
+  <button class="logout" onclick="logout()">
+    Logout
+  </button>
+</div>
+
+<script>
+function goToReset(){
+  window.location.href = "reset-request.html";
+}
+
+function goBack(){
+  if(window.history.length > 1){
+    window.history.back();
+  } else {
+    window.location.href = "masterpage.html";
+  }
+}
+
+function logout(){
+  // remove only session-related info
+  localStorage.removeItem("userId");
+  localStorage.removeItem("email");
+  localStorage.removeItem("name");
+
+  window.location.href = "frontpage.html";
+}
+</script>
+
+</body>
+</html>

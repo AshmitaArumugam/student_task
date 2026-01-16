@@ -43,14 +43,12 @@ body{
   color:white;
 }
 
-/* DARK OVERLAY */
 .overlay{
   position:absolute;
   inset:0;
   background:rgba(2,6,23,0.75);
 }
 
-/* CARD */
 .box{
   position:relative;
   width:360px;
@@ -72,7 +70,6 @@ body{
   margin-bottom:15px;
 }
 
-/* INPUT */
 .box input{
   width:100%;
   padding:12px;
@@ -82,7 +79,6 @@ body{
   font-size:15px;
 }
 
-/* BUTTON */
 .box button{
   width:100%;
   padding:12px;
@@ -122,36 +118,46 @@ small{
 
 <script>
 function sendOTP(){
-  const storedEmail = localStorage.getItem("email");
-  const entered = email.value;
 
-  if(entered !== storedEmail){
-    msg.innerText = "Email not found";
+  const email = document.getElementById("email").value.trim();
+  const msg = document.getElementById("msg");
+
+  if (!email) {
+    msg.innerText = "Please enter email";
     msg.style.color = "red";
     return;
   }
 
-function goBack(){
-  if(window.history.length > 1){
-    window.history.back();
-  } else {
-    window.location.href = "masterpage.html";
-  }
-}
+  // CALL BACKEND TO SEND OTP
+  fetch("http://localhost:3000/auth/send-otp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email })
+  })
+  .then(res => res.json())
+  .then(data => {
 
-  // Generate OTP (simulation)
-  const otp = Math.floor(100000 + Math.random() * 900000);
-  localStorage.setItem("resetOTP", otp);
-  localStorage.setItem("otpAllowed", "true");
+    if (!data.success) {
+      msg.innerText = data.message || "Email not registered";
+      msg.style.color = "red";
+      return;
+    }
 
-  console.log("OTP (simulation):", otp);
+    // Save email for OTP verification page
+    localStorage.setItem("reset_email", email);
 
-  msg.innerText = "OTP sent to your email (simulation)";
-  msg.style.color = "#22c55e";
+    msg.innerText = "OTP sent to your email";
+    msg.style.color = "#22c55e";
 
-  setTimeout(()=>{
-    window.location.href = "verify-otp.html";
-  }, 1500);
+    setTimeout(() => {
+      window.location.href = "verify-otp.html";
+    }, 1500);
+  })
+  .catch(() => {
+    msg.innerText = "Server error";
+    msg.style.color = "red";
+  });
+
 }
 </script>
 

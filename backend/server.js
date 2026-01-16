@@ -2,6 +2,7 @@ const express = require("express");
 const mysql = require("mysql2");
 const cors = require("cors");
 const path = require("path");
+const nodemailer = require("nodemailer");
 
 const app = express();
 app.use(cors());
@@ -22,19 +23,21 @@ db.connect(err => {
 });
 
 /* =====================================================
-   USERS
+   USERS (REGISTER & LOGIN)
 ===================================================== */
 
 app.post("/register", (req, res) => {
   const { name, email, password } = req.body;
+
   if (!name || !email || !password)
-    return res.json({ success: false });
+    return res.json({ success: false, message: "All fields required" });
 
   db.query(
     "INSERT INTO users (name,email,password) VALUES (?,?,?)",
     [name, email, password],
     err => {
-      if (err) return res.json({ success: false });
+      if (err)
+        return res.json({ success: false, message: "Email already exists" });
       res.json({ success: true });
     }
   );
@@ -48,10 +51,10 @@ app.post("/login", (req, res) => {
     [email],
     (err, rows) => {
       if (rows.length === 0)
-        return res.json({ success: false });
+        return res.json({ success: false, message: "Invalid email" });
 
       if (rows[0].password !== password)
-        return res.json({ success: false });
+        return res.json({ success: false, message: "Wrong password" });
 
       res.json({
         success: true,
@@ -66,217 +69,92 @@ app.post("/login", (req, res) => {
 });
 
 /* =====================================================
-   SKILLS
+   FORGOT PASSWORD (OTP FLOW)
 ===================================================== */
 
-app.post("/skills/add", (req, res) => {
-  const { user_id, name } = req.body;
+/* STEP 1 — SEND OTP */
+app.post("/auth/send-otp", (req, res) => {
+  const { email } = req.body;
 
-  db.query(
-    "INSERT INTO skills (user_id,name) VALUES (?,?)",
-    [user_id, name],
-    err => {
-      if (err) return res.json({ success: false });
-      res.json({ success: true });
-    }
-  );
-});
+  db.query("SELECT * FROM users WHERE email=?", [email], (err, rows) => {
+    if (rows.length === 0)
+      return res.json({ success: false, message: "Email not registered" });
 
-app.get("/skills/:userId", (req, res) => {
-  const userId = req.params.userId;
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-  const sql = `
-    SELECT s.id skill_id, s.name skill_name,
-           t.id topic_id, t.name topic_name, t.status
-    FROM skills s
-    LEFT JOIN topics t ON s.id = t.skill_id
-    WHERE s.user_id=?
-  `;
+    db.query(
+      "UPDATE users SET otp=?, otp_expiry=DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE email=?",
+      [otp, email],
+      err => {
+        if (err) return res.json({ success: false });
 
-  db.query(sql, [userId], (err, rows) => {
-    if (err) return res.json([]);
-
-    const map = {};
-    rows.forEach(r => {
-      if (!map[r.skill_id]) {
-        map[r.skill_id] = {
-          id: r.skill_id,
-          name: r.skill_name,
-          topics: []
-        };
-      }
-      if (r.topic_id) {
-        map[r.skill_id].topics.push({
-          id: r.topic_id,
-          name: r.topic_name,
-          status: r.status
+        const transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: {
+            user: "ashmitaarumugam3@gmail.com",   // YOUR GMAIL
+            pass: "evvp ojtq sxgn mwpn" // APP PASSWORD ONLY
+          }
         });
-      }
-    });
 
-    res.json(Object.values(map));
+        transporter.sendMail(
+          {
+            from: "Student App <ashmitaarumugam3@gmail.com>",
+            to: email,
+            subject: "Your OTP Code",
+            text: `Your OTP is ${otp}. It expires in 5 minutes.`
+          },
+          mailErr => {
+            if (mailErr) {
+              console.log("Mail Error:", mailErr);
+              return res.json({ success: false, message: "Email sending failed" });
+            }
+            res.json({ success: true, message: "OTP sent to email" });
+          }
+        );
+      }
+    );
   });
 });
 
-/* =====================================================
-   TOPICS
-===================================================== */
-
-app.post("/topics/add", (req, res) => {
-  const { skill_id, name } = req.body;
+/* STEP 2 — VERIFY OTP */
+app.post("/auth/verify-otp", (req, res) => {
+  const { email, otp } = req.body;
 
   db.query(
-    "INSERT INTO topics (skill_id,name) VALUES (?,?)",
-    [skill_id, name],
+    "SELECT * FROM users WHERE email=? AND otp=? AND otp_expiry > NOW()",
+    [email, otp],
+    (err, rows) => {
+      if (rows.length === 0)
+        return res.json({ success: false, message: "Invalid or expired OTP" });
+
+      db.query(
+        "UPDATE users SET otp=NULL, otp_expiry=NULL WHERE email=?",
+        [email]
+      );
+
+      res.json({ success: true });
+    }
+  );
+});
+
+/* STEP 3 — RESET PASSWORD */
+app.post("/auth/reset-password", (req, res) => {
+  const { email, newPassword } = req.body;
+
+  db.query(
+    "UPDATE users SET password=? WHERE email=?",
+    [newPassword, email],
     err => {
       if (err) return res.json({ success: false });
-      res.json({ success: true });
-    }
-  );
-});
 
-app.post("/topics/status", (req, res) => {
-  const { topic_id, status } = req.body;
-
-  db.query(
-    "UPDATE topics SET status=? WHERE id=?",
-    [status, topic_id],
-    err => {
-      if (err) return res.json({ success: false });
-      res.json({ success: true });
-    }
-  );
-});
-
-/* DELETE TOPIC */
-app.post("/topics/delete", (req, res) => {
-  const { topic_id } = req.body;
-
-  db.query(
-    "DELETE FROM topics WHERE id=?",
-    [topic_id],
-    err => {
-      if (err) {
-        console.log("Delete topic error:", err);
-        return res.json({ success:false });
-      }
-      res.json({ success:true });
+      res.json({ success: true, message: "Password updated" });
     }
   );
 });
 
 /* =====================================================
-   PROGRESS  ✅ (KEY FIX)
+   SERVER START
 ===================================================== */
-
-app.post("/progress", (req, res) => {
-  const { userId } = req.body;
-
-  const sql = `
-    SELECT 
-      s.id AS skill_id,
-      s.name AS skill_name,
-      COUNT(t.id) AS total,
-      COALESCE(SUM(t.status='finished'), 0) AS completed
-    FROM skills s
-    LEFT JOIN topics t ON s.id = t.skill_id
-    WHERE s.user_id = ?
-    GROUP BY s.id
-  `;
-
-  db.query(sql, [userId], (err, rows) => {
-    if (err) {
-      console.log("Progress error:", err);
-      return res.json({
-        skillCount: 0,
-        topicCount: 0,
-        completedCount: 0,
-        activeDays: 0,
-        skills: []
-      });
-    }
-
-    let topicCount = 0;
-    let completedCount = 0;
-
-    rows.forEach(r => {
-  topicCount += Number(r.total);
-  completedCount += Number(r.completed);
-});
-
-
-    res.json({
-      skillCount: rows.length,
-      topicCount,
-      completedCount,
-      activeDays: 0,
-      skills: rows
-    });
-  });
-});
-
-/* =====================================================
-   TASKS
-===================================================== */
-
-// ADD TASK
-app.post("/tasks/add", (req, res) => {
-  const { user_id, task_date, text } = req.body;
-
-  if (!user_id || !task_date || !text)
-    return res.json({ success: false });
-
-  db.query(
-    "INSERT INTO tasks (user_id, task_date, text) VALUES (?,?,?)",
-    [user_id, task_date, text],
-    err => {
-      if (err) {
-        console.log("Task add error:", err);
-        return res.json({ success: false });
-      }
-      res.json({ success: true });
-    }
-  );
-});
-
-
-// TOGGLE TASK DONE
-app.post("/tasks/toggle", (req, res) => {
-  const { id, done } = req.body;
-
-  const sql = `
-    UPDATE tasks SET done = ?
-    WHERE id = ?
-  `;
-
-  db.query(sql, [done, id], err => {
-    if (err) {
-      console.log("Toggle task error:", err);
-      return res.json({ success: false });
-    }
-    res.json({ success: true });
-  });
-});
-
-// GET TASKS FOR DAY
-app.get("/tasks/:userId/:date", (req, res) => {
-  const { userId, date } = req.params;
-
-  const sql = `
-    SELECT id, text, done 
-    FROM tasks 
-    WHERE user_id = ? AND task_date = ?
-    ORDER BY id ASC
-  `;
-
-  db.query(sql, [userId, date], (err, rows) => {
-    if (err) {
-      console.log("Load tasks error:", err);
-      return res.json([]);
-    }
-    res.json(rows);
-  });
-});
 
 app.listen(3000, () => {
   console.log("Server running on port 3000");
